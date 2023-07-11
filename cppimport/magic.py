@@ -1,4 +1,7 @@
-# -*- coding: utf-8 -*-
+# vim:set sw=4 ts=8 fileencoding=utf-8:
+# SPDX-License-Identifier: MIT
+# Copyright © 2023, Serguei E. Leontiev (leo@sai.msu.ru)
+#
 '''
 =======================
 cppimport IPython magic
@@ -162,11 +165,15 @@ class CppImportMagics(Magics):
               help='Clean ``cppimport.magic`` build cache.')
     @argument('--defaults', action='store_true',
               help='Delete custom configuration and back to default.')
+    @argument('--help', action='store_true',
+              help='Print docstring as output cell.')
     @line_magic
     def cppimport_config(self, line):
         args = self._parse_argstring_with_config(self.cppimport_config, line)
         with _set_level(verbosity=args.verbosity):
-            if args.clean_cache:
+            if args.help:
+                print(self.cppimport_config.__doc__)
+            elif args.clean_cache:
                 _ci_log_info('Clean cache: %s', self._lib_dir)
                 self._cache_clean()
                 _logger.debug('New cache: %s', self._lib_dir)
@@ -196,10 +203,12 @@ class CppImportMagics(Magics):
     @argument('-v', '--verbosity', action='count', default=0,
               help='Increase output verbosity.')
     @argument('cpp_module', type=str,
-              help='Module C/C++ source file.')
+              help='Module C/C++ source file name.')
+    @argument('--help', action='store_true',
+              help='Print docstring as output cell.')
     @cell_magic
     def cppimport(self, line, cell):
-        '''Build and import C++/C module from ``%%ccpimport`` cell
+        '''Build and import C/C++ module from ``%%ccpimport`` cell
 
         The content of the cell is written to a file in the
         directory ``$IPYTHONDIR/cppimport/<random>/<hash>/`` using
@@ -217,7 +226,10 @@ class CppImportMagics(Magics):
 
         args = self._parse_argstring_with_config(self.cppimport, line)
         with _set_level(verbosity=args.verbosity):
-            code = cell if cell.endswith('\n') else cell + '\n'
+            if args.help:
+                print(self.cppimport.__doc__)
+                return
+            code = '\n' + (cell if cell.endswith('\n') else cell + '\n')
             orig_fullname = os.path.splitext(args.cpp_module)[0]
             key = (args.cpp_module, orig_fullname,
                    code, line, self.shell.db.get('cppimport'),
@@ -228,13 +240,8 @@ class CppImportMagics(Magics):
 
             fullname = '_' + checksum + '_' + orig_fullname
 
-            if fullname in sys.modules:
-                if not cppimport.settings['force_rebuild']:
-                    _logger.warning('The extension %s is already loaded. '
-                                    'To reload it, use: '
-                                    '%%cppimport_config --clean-cache',
-                                    fullname)
-                    return
+            if (fullname in sys.modules and
+               cppimport.settings['force_rebuild']):
                 # Symbol ``PyInit_{fullname}`` already defined.
                 # For rebuild and load we need another, different.
                 while fullname in sys.modules:
@@ -243,20 +250,31 @@ class CppImportMagics(Magics):
                                     fullname.encode('utf-8')).hexdigest()
                                 + '_'
                                 + orig_fullname)
+            if fullname in sys.modules:
+                module = sys.modules[fullname]
+                _logger.warning('The extension %s is already loaded. '
+                                'To reload it, use: '
+                                '%%cppimport_config --clean-cache',
+                                fullname)
+            else:
+                dir = os.path.join(self._lib_dir, checksum)
+                with contextlib.suppress(FileExistsError):
+                    os.mkdir(dir)
+                filepath = os.path.join(dir, args.cpp_module)
+                with open(filepath, 'w') as f:
+                    f.write(code)
 
-            dir = os.path.join(self._lib_dir, checksum)
-            with contextlib.suppress(FileExistsError):
-                os.mkdir(dir)
-            filepath = os.path.join(dir, args.cpp_module)
-            with open(filepath, 'w') as f:
-                f.write(code)
+                # TODO: add optional argument cfg to cppimport.imp_from_filepath()
+                # with _cflags_append('-DPyInit_' + orig_fullname +
+                #                     '=PyInit_' + fullname):
+                #     module = cppimport.imp_from_filepath(filepath, fullname)
+                cfgbase = {'extra_compile_args':
+                           ['-DPyInit_' + orig_fullname +
+                            '=PyInit_' + fullname]}
+                module = cppimport.imp_from_filepath(filepath, fullname,
+                                                     cfgbase=cfgbase)
+                module.__source__ = code
 
-            # TODO: add optional argument cfg to cppimport.imp_from_filepath()
-            with _cflags_append('-DPyInit_' + orig_fullname +
-                                '=PyInit_' + fullname):
-                module = cppimport.imp_from_filepath(filepath, fullname)
-
-            module.__source__ = code
             self.shell.push({orig_fullname: module})
             _ci_log_info('%s', 'C/C++ objects: ' +
                          ' '.join(orig_fullname + '.' + k
@@ -273,7 +291,7 @@ def load_ipython_extension(ip):
 
     ip.register_magics(CppImportMagics)
 
-    # enable C/C++ highlight
+    # enable C++ highlight
     patch = '''
         if(typeof IPython === 'undefined') {
             console.log('cppimport/magic.py: TDOO: JupyterLab ' +

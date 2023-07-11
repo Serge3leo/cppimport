@@ -42,6 +42,31 @@ def run_templating(module_data):
 
     module_data["rendered_src_filepath"] = rendered_src_filepath
 
+    for k, v in module_data["cfgbase"].items():
+        module_data["cfg"][k] = v + module_data["cfg"][k]
+        # module_data["cfg"]["parallel"] - actually or-ed
+
+    check_cfg = ["dependencies", "extra_compile_args", "extra_link_args",
+                 "include_dirs", "libraries", "library_dirs",
+                 "parallel", "sources"]
+    misspell_cfg = [k for k in module_data["cfg"] if k not in check_cfg]
+    if misspell_cfg:
+        logger.warning("Unknown `cfg` keys: %s, probably misspelling",
+                       misspell_cfg)
+
+    check_module_data = ["cfg", "cfgbase", "ext_name", "ext_path",
+                         "filebasename", "filedirname", "filepath",
+                         "fullname", "rendered_src_filepath",
+                         "setup_pybind11"]
+    misspell_module_data = [k for k in module_data
+                            if k not in check_module_data]
+    if misspell_module_data:
+        logger.warning("Unknown `module_data` keys: %s, probably misspelling",
+                       misspell_module_data)
+    # import pprint  # TODO
+    # pprint.pprint(module_data)  # TODO
+    # assert False  # TODO
+
 
 class BuildArgs(dict):
     """
