@@ -7,7 +7,59 @@ import mako.lookup
 import mako.runtime
 import mako.template
 
+import cppimport
+
 logger = logging.getLogger(__name__)
+
+
+def _check_module_data_cfg_settings(module_data):
+    check_cfg = [
+        "dependencies",
+        "extra_compile_args",
+        "extra_link_args",
+        "include_dirs",
+        "libraries",
+        "library_dirs",
+        "parallel",
+        "sources",
+    ]
+    misspell_cfg = [k for k in module_data["cfg"] if k not in check_cfg]
+    if misspell_cfg:
+        logger.warning("Unknown `cfg` keys: %s, probably misspelling", misspell_cfg)
+
+    check_module_data = [
+        "cfg",
+        "cfgbase",
+        "ext_name",
+        "ext_path",
+        "filebasename",
+        "filedirname",
+        "filepath",
+        "fullname",
+        "rendered_src_filepath",
+        "setup_pybind11",
+    ]
+    misspell_module_data = [k for k in module_data if k not in check_module_data]
+    if misspell_module_data:
+        logger.warning(
+            "Unknown `module_data` keys: %s, probably misspelling", misspell_module_data
+        )
+
+    check_settings = [
+        "force_rebuild",
+        "file_exts",
+        "lock_suffix",
+        "lock_timeout",
+        "release_mode",
+        "remove_strict_prototypes",
+        "rtld_flags",
+    ]
+    misspell_settings = [k for k in cppimport.settings if k not in check_settings]
+    if misspell_settings:
+        logger.warning(
+            "Unknown `cppimport.settings` keys: %s, probably misspelling",
+            misspell_settings,
+        )
 
 
 def run_templating(module_data):
@@ -41,6 +93,12 @@ def run_templating(module_data):
         f.write(buf.getvalue())
 
     module_data["rendered_src_filepath"] = rendered_src_filepath
+
+    for k, v in module_data["cfgbase"].items():
+        module_data["cfg"][k] = v + module_data["cfg"][k]
+        # module_data["cfg"]["parallel"] - actually or-ed
+
+    _check_module_data_cfg_settings(module_data)
 
 
 class BuildArgs(dict):

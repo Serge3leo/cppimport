@@ -15,3 +15,5 @@ htmlcov
 **/.DS_Store
 .eggs
 cppimport/_version.py
+.ipynb_checkpoints
+.temp_test_*

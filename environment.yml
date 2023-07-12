@@ -12,3 +12,11 @@ dependencies:
   - pytest-cov
   - pre-commit
   - filelock
+  - boost
+  - ipython
+  - numpy
+  - nbconvert
+  - nbformat
+  - ipykernel
+  - blas
+  - lapack
