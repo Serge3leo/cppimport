@@ -24,11 +24,17 @@ from nbconvert.preprocessors import ExecutePreprocessor
 COVERAGE = True  # import & start coverage
 
 DTE_RANDOMS = {"random", "random_long"}
-DTE_SKIPS = {"skip", "skip_darwin", "skip_linux", "skip_win32"}
-DTE_XFAILS = {"xfail", "xfail_darwin", "xfail_linux", "xfail_win32"}
+DTE_SKIPS = {"skip", "skip_darwin", "skip_linux", "skip_win32"} | {
+    "skip_python_le3_%02d" % i for i in range(7, 13)
+}
+DTE_XFAILS = {"xfail", "xfail_darwin", "xfail_linux", "xfail_win32"} | {
+    "xfail_python_le3_%02d" % i for i in range(7, 13)
+}
 
 # All kinds of notebook cell tags
 DTA_TAGS = DTE_RANDOMS | DTE_SKIPS | DTE_XFAILS
+
+SYS_PYTHON = "python_le%d_%02d" % (sys.version_info.major, sys.version_info.minor)
 
 
 def _get_stags(meta):
@@ -38,10 +44,13 @@ def _get_stags(meta):
 
 def _check_sxf(sxf, stags):
     for t in stags:
-        if t == sxf or (
-            t.startswith(sxf + "_") and sys.platform.startswith(t[len(sxf) + 1 :])
-        ):
+        if t == sxf:
             return True
+        if t.startswith(sxf + "_"):
+            if sys.platform.startswith(t[len(sxf) + 1 :]):
+                return True
+            if SYS_PYTHON <= t[len(sxf) + 1 :]:
+                return True
     return False
 
 
