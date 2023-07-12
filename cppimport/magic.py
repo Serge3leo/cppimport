@@ -77,20 +77,20 @@ def _set_level(verbosity=None, level=None):
         root_log.setLevel(old_level)
 
 
-@contextlib.contextmanager
-def _cflags_append(cflags):
-    # TODO: add optional argument cfg to cppimport.imp_from_filepath()
-    # TODO: remove this contextmanager
-    old_cflags = os.environ.get('CFLAGS')
-    os.environ['CFLAGS'] = (cflags if old_cflags is None
-                            else (old_cflags + ' ' + cflags))
-    try:
-        yield
-    finally:
-        if old_cflags is None:
-            del os.environ['CFLAGS']
-        else:
-            os.environ['CFLAGS'] = old_cflags
+# @contextlib.contextmanager
+# def _cflags_append(cflags):
+#     # TODO: add optional argument cfg to cppimport.imp_from_filepath()
+#     # TODO: remove this contextmanager
+#     old_cflags = os.environ.get('CFLAGS')
+#     os.environ['CFLAGS'] = (cflags if old_cflags is None
+#                             else (old_cflags + ' ' + cflags))
+#     try:
+#         yield
+#     finally:
+#         if old_cflags is None:
+#             del os.environ['CFLAGS']
+#         else:
+#             os.environ['CFLAGS'] = old_cflags
 
 
 @magics_class
@@ -229,6 +229,7 @@ class CppImportMagics(Magics):
             if args.help:
                 print(self.cppimport.__doc__)
                 return
+            self._cache_check()
             code = '\n' + (cell if cell.endswith('\n') else cell + '\n')
             orig_fullname = os.path.splitext(args.cpp_module)[0]
             key = (args.cpp_module, orig_fullname,

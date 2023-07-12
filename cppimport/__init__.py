@@ -27,7 +27,7 @@ settings = dict(
 _logger = logging.getLogger("cppimport")
 
 
-def imp(fullname, opt_in=False, *, cfgbase=[]):
+def imp(fullname, opt_in=False, *, cfgbase={}):
     """
     `imp` is the explicit alternative to using cppimport.import_hook.
 
@@ -50,7 +50,7 @@ def imp(fullname, opt_in=False, *, cfgbase=[]):
     return imp_from_filepath(filepath, fullname, cfgbase=cfgbase)
 
 
-def imp_from_filepath(filepath, fullname=None, *, cfgbase=[]):
+def imp_from_filepath(filepath, fullname=None, *, cfgbase={}):
     """
     `imp_from_filepath` serves the same purpose as `imp` except allows
     specifying the exact filepath of the C++ file.

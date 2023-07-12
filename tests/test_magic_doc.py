@@ -21,24 +21,18 @@ import pytest
 from jupyter_client.manager import start_new_kernel
 from nbconvert.preprocessors import ExecutePreprocessor
 
-DTE_FAST = 'fast'
-DTE_MEDIUM = '_medium'  # No `DTE_TAGS`
-DTE_SLOW = 'slow'
+COVERAGE = True  # import & start coverage
+
 DTE_RANDOMS = {'random', 'random_long'}
-DTE_TAGS = {DTE_FAST, DTE_SLOW}
 DTE_SKIPS = {'skip', 'skip_darwin', 'skip_linux', 'skip_win32'}
 DTE_XFAILS = {'xfail', 'xfail_darwin', 'xfail_linux', 'xfail_win32'}
 
 # All kinds of notebook cell tags
-DTA_TAGS = DTE_TAGS | {DTE_MEDIUM} | DTE_RANDOMS | DTE_SKIPS | DTE_XFAILS
-
-DTE_TESTED = set()
+DTA_TAGS = DTE_RANDOMS | DTE_SKIPS | DTE_XFAILS
 
 
 def _get_stags(meta):
     stags = set(meta.get('tags', []))
-    if not (stags & DTE_TAGS):
-        stags.add(DTE_MEDIUM)
     return stags
 
 
@@ -50,33 +44,25 @@ def _check_sxf(sxf, stags):
     return False
 
 
+def _outputs_no_ec(c):
+    return [{k: v for k, v in e.items() if k != 'execution_count'}
+            for e in c.get('outputs', [])]
+
+
 class SkipExecutePreprocessor(ExecutePreprocessor):
     """Selecting cells and clearing rejected."""
 
-    def __init__(self, tags=None, verbose=0, **kwargs):
-        self._tags = tags
-        self._verbose = verbose
+    def __init__(self, **kwargs):
         super(SkipExecutePreprocessor, self).__init__(**kwargs)
 
     def preprocess_cell(self, cell, resources, index):
         stags = _get_stags(cell.metadata)
-        if not (stags & self._tags) or _check_sxf('skip', stags):
-            if self._verbose >= 1:
-                warnings.warn(Warning("SkipExecutePreprocessor: "
-                                      "skip cell id: " + cell.id +
-                                      "\n" + cell.get('source', "") +
-                                      "\n========"))
+        if _check_sxf('skip', stags):
             rcell, rresources = cell.copy(), resources
         else:
-            if self._verbose >= 2:
-                warnings.warn(Warning("SkipExecutePreprocessor: "
-                                      "execute cell id: " + cell.id +
-                                      "\n" + cell.get('source', "") +
-                                      "\n========"))
             allow_errors = self.allow_errors
             try:
-                if _check_sxf('xfail', stags):
-                    self.allow_errors = True
+                self.allow_errors = _check_sxf('xfail', stags)
                 rcell, rresources = \
                     super(SkipExecutePreprocessor,
                           self).preprocess_cell(cell, resources, index)
@@ -85,50 +71,42 @@ class SkipExecutePreprocessor(ExecutePreprocessor):
         return rcell, rresources
 
 
-def magic_doc_testing_engine(tags, verbose):
+def test_magic_doc():
     """Calculation & comparison selected subset of cells."""
 
-    global DTE_TESTED
-
-    if not (tags - DTE_TESTED):
-        pytest.skip(str(tags) + " previously tested")
-        return
-    assert not DTE_TESTED, "Bad test_magic_doc_*() order"
-    DTE_TESTED |= tags
-
     with open('magic_doc.ipynb', 'r') as f:
-        test_magic_doc = nbformat.read(f, nbformat.NO_CONVERT)
-        assert len(test_magic_doc.cells) > 1
+        tmd = nbformat.read(f, nbformat.NO_CONVERT)
+        assert len(tmd.cells) > 1
 
-    test_magic_doc.cells.insert(
-            0,
-            nbformat.v4.new_code_cell(
-                "import coverage as _tdi_coverage\n"
-                "_tdi_cov = _tdi_coverage.Coverage()\n"
-                "_tdi_cov.start()\n"
+    if COVERAGE:
+        tmd.cells.insert(
+                0,
+                nbformat.v4.new_code_cell(
+                    "import coverage as _tdi_coverage\n"
+                    "_tdi_cov = _tdi_coverage.Coverage()\n"
+                    "_tdi_cov.start()\n"
+                    )
                 )
-            )
-    test_magic_doc.cells.append(
-            nbformat.v4.new_code_cell(
-                "_tdi_cov.stop()\n"
-                "_tdi_cov.save()\n"
+        tmd.cells.append(
+                nbformat.v4.new_code_cell(
+                    "_tdi_cov.stop()\n"
+                    "_tdi_cov.save()\n"
+                    )
                 )
-            )
 
-    for t in test_magic_doc.cells:
+    for t in tmd.cells:
         if t.cell_type == 'code':
-            if 'execution' in t.metadata:
+            if 'execution' in t.metadata:  # TODO: remove
                 del t.metadata['execution']
 
-    ep = SkipExecutePreprocessor(tags=tags, verbose=verbose, timeout=600)
+    ep = SkipExecutePreprocessor(timeout=600)
     km, _ = start_new_kernel()  # Ignore kernelspec in magic_doc.ipynb
-    exec_magic_doc, _ = ep.preprocess(copy.deepcopy(test_magic_doc),
-                                      km=km)
+    emd, _ = ep.preprocess(copy.deepcopy(tmd), km=km)
 
     xfail_cells, xpass_cells = 0, 0
 
-    assert len(test_magic_doc.cells) == len(exec_magic_doc.cells)
-    for t, e in zip(test_magic_doc.cells, exec_magic_doc.cells):
+    assert len(tmd.cells) == len(emd.cells)
+    for t, e in zip(tmd.cells, emd.cells):
         stags = _get_stags(t.metadata)
         if stags - DTA_TAGS:
             warnings.warn(Warning(
@@ -138,23 +116,17 @@ def magic_doc_testing_engine(tags, verbose):
             if _check_sxf('xfail', stags):
                 xfail_cells += 1
                 continue
-            assert False, "for cell: " + str(e)
+            assert False, "Found 'error' 'outputs' in for cell: " + str(e)
+
         if DTE_RANDOMS & stags:
             continue
-        try:
-            assert not (('outputs' in t) ^ ('outputs' in e)), \
-                   "for cell: " + str(t)
-            if 'outputs' in t:
-                for to, eo in zip(t.outputs, e.outputs):
-                    if 'execution_count' in to:
-                        cto = to.copy()
-                        cto.execution_count = eo.execution_count
-                        assert cto == eo, "for cell: " + str(e)
-            if _check_sxf('xfail', stags):
-                xpass_cells += 1
-        except AssertionError:
-            if not _check_sxf('xfail', stags):
-                raise
+
+        if not _check_sxf('xfail', stags):
+            assert _outputs_no_ec(t) == _outputs_no_ec(e), \
+                    "for cell: " + str(t)
+        elif _outputs_no_ec(t) == _outputs_no_ec(e):
+            xpass_cells += 1
+        else:
             xfail_cells += 1
 
     if xfail_cells or xpass_cells:
@@ -164,37 +136,4 @@ def magic_doc_testing_engine(tags, verbose):
         if xfail_cells:
             pytest.xfail(msg)
 
-
-verbose=0
-
-
-@pytest.mark.slow
-def test_magic_doc_slow():
-    """
-    Default - all cells.
-
-    This test skipped by `-m 'not slow'` or `-m fast`."""
-
-    magic_doc_testing_engine({DTE_SLOW, DTE_MEDIUM, DTE_FAST}, verbose)
-
-
-@pytest.mark.medium
-def test_magic_doc_medium():
-    """
-    `-m 'not slow'`
-
-    Really working if `DTE_TESTED` empty.
-    """
-
-    magic_doc_testing_engine({DTE_MEDIUM, DTE_FAST}, verbose)
-
-
-@pytest.mark.fast
-def test_magic_doc_fast():
-    """
-    `-m fast`
-
-    Really working if `DTE_TESTED` empty.
-    """
-
-    magic_doc_testing_engine({DTE_FAST}, verbose)
+    km.shutdown_kernel(now=True, restart=False)

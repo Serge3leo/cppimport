@@ -79,7 +79,7 @@ def template_and_build(filepath, module_data):
     checksum_save(module_data)
 
 
-def setup_module_data(fullname, filepath, *, cfgbase=[]):
+def setup_module_data(fullname, filepath, *, cfgbase={}):
     module_data = dict()
     module_data["cfgbase"] = cfgbase
     module_data["fullname"] = fullname
