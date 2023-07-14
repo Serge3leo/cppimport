@@ -46,7 +46,8 @@ jobs:
     - name: Test
       if: ${{ matrix.os == 'macos-latest' }}
       run: |
-        CFLAGS='-stdlib=libc++' pytest --cov=./ --cov-report=xml
+        brew --prefix llvm@15
+        PATH="$(brew --prefix llvm@15)/bin:$PATH" CFLAGS='-stdlib=libc++' pytest --cov=./ --cov-report=xml
     - name: Test
       if: ${{ matrix.os != 'macos-latest' }}
       run: |
