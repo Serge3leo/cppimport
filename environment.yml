@@ -15,6 +15,7 @@ dependencies:
   - boost
   - ipython
   - numpy
+  - threadpoolctl
   - nbconvert
   - nbformat
   - ipykernel
