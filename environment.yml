@@ -15,8 +15,8 @@ dependencies:
   - boost
   - ipython
   - numpy
+  - threadpoolctl
   - nbconvert
   - nbformat
   - ipykernel
-  - blas
-  - lapack
+  - blas=*=openblas
