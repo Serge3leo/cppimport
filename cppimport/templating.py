@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import sys
 
 import mako.exceptions
 import mako.lookup
@@ -122,10 +123,17 @@ class BuildArgs(dict):
 def setup_pybind11(cfg):
     import pybind11
 
-    cfg["include_dirs"] += [pybind11.get_include(), pybind11.get_include(True)]
-    # Prefix with c++11 arg instead of suffix so that if a user specifies c++14
-    # (or later!) then it won't be overridden.
-    cfg["compiler_args"] = ["-std=c++11", "-fvisibility=hidden"] + cfg["compiler_args"]
+    cfg["include_dirs"] += [pybind11.get_include()]
+    if not sys.platform.startswith("win"):
+        # Windows default behaviour similar `-fvisibility=hidden`.
+        # There is no direct reference to `-std=c++11` in `pybind11`
+        # documentation.
+        #
+        # Prefix with c++11 arg instead of suffix so that if a user
+        # specifies c++14 (or later!) then it won't be overridden.
+        cfg["compiler_args"] = ["-std=c++11", "-fvisibility=hidden"] + cfg[
+            "compiler_args"
+        ]
 
 
 def get_rendered_source_filepath(filepath):
