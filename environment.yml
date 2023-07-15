@@ -19,5 +19,4 @@ dependencies:
   - nbconvert
   - nbformat
   - ipykernel
-  - blas
-  - lapack
+  - blas=*=openblas

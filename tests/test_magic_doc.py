@@ -93,7 +93,7 @@ class SkipExecutePreprocessor(ExecutePreprocessor):
 def test_magic_doc():
     """Calculation & comparison selected subset of cells."""
 
-    with open("magic_doc.ipynb", "r") as f:
+    with open("magic_doc.ipynb", "rb") as f:
         tmd = nbformat.read(f, nbformat.NO_CONVERT)
         assert len(tmd.cells) > 1
 
