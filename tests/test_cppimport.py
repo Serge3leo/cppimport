@@ -36,18 +36,20 @@ def appended(filename, text):
             f.write(orig)
 
 
-def subprocess_check(test_code, returncode=0):
+def subprocess_check(test_code, returncode=0, cwd=os.path.dirname(__file__)):
     p = subprocess.run(
         [sys.executable, "-c", test_code],
-        cwd=os.path.dirname(__file__),
+        cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        text=True,
     )
     if len(p.stdout) > 0:
-        print(p.stdout.decode("utf-8"))
+        print(p.stdout)
     if len(p.stderr) > 0:
-        print(p.stderr.decode("utf-8"))
+        print(p.stderr)
     assert p.returncode == returncode
+    assert "mymodule" not in sys.modules
 
 
 @contextlib.contextmanager
@@ -90,21 +92,47 @@ def module_tester(mod, cheer=False):
         mod.Thing().cheer()
 
 
+_module_prefix = """
+if True:
+    if True:
+        import cppimport
+"""
+
+_module_tester = """
+        assert mymodule.add(1, 2) == 3
+"""
+
+
 def test_mymodule():
-    mymodule = cppimport.imp("mymodule")
-    module_tester(mymodule)
+    subprocess_check(
+        _module_prefix
+        + """
+        mymodule = cppimport.imp("mymodule")
+        """
+        + _module_tester
+    )
 
 
 def test_mymodule_build():
-    cppimport.build("mymodule")
-    import mymodule
-
-    module_tester(mymodule)
+    subprocess_check(
+        _module_prefix
+        + """
+        cppimport.build("mymodule")
+        import mymodule
+        """
+        + _module_tester
+    )
 
 
 def test_mymodule_from_filepath():
-    mymodule = cppimport.imp_from_filepath("tests/mymodule.cpp")
-    module_tester(mymodule)
+    subprocess_check(
+        _module_prefix
+        + """
+        mymodule = cppimport.imp_from_filepath("tests/mymodule.cpp")
+        """
+        + _module_tester,
+        cwd=".",
+    )
 
 
 def test_package_mymodule():
@@ -119,13 +147,19 @@ def test_inner_package_mymodule():
 
 def test_with_file_in_syspath():
     orig_sys_path = copy.copy(sys.path)
-    sys.path.append(os.path.join(os.path.dirname(__file__), "mymodule.cpp"))
-    cppimport.imp("mymodule")
+    sys.path.append(os.path.join(os.path.dirname(__file__), "cpp14module.cpp"))
+    cppimport.imp("cpp14module")
     sys.path = orig_sys_path
 
 
 def test_rebuild_after_failed_compile():
-    cppimport.imp("mymodule")
+    subprocess_check(
+        _module_prefix
+        + """
+        mymodule = cppimport.imp("mymodule")
+        """
+        + _module_tester
+    )
     test_code = """
 import cppimport; mymodule = cppimport.imp("mymodule");assert(mymodule.add(1,2) == 3)
 """
@@ -146,7 +180,13 @@ struct Thing {
 
 
 def test_no_rebuild_if_no_deps_change():
-    cppimport.imp("mymodule")
+    subprocess_check(
+        _module_prefix
+        + """
+        mymodule = cppimport.imp("mymodule")
+        """
+        + _module_tester
+    )
     test_code = """
 import cppimport;
 mymodule = cppimport.imp("mymodule");
@@ -157,7 +197,13 @@ assert(not hasattr(mymodule, 'Thing'))
 
 
 def test_rebuild_header_after_change():
-    cppimport.imp("mymodule")
+    subprocess_check(
+        _module_prefix
+        + """
+        mymodule = cppimport.imp("mymodule")
+        """
+        + _module_tester
+    )
     test_code = """
 import cppimport;
 mymodule = cppimport.imp("mymodule");
@@ -219,7 +265,7 @@ def test_multiple_processes():
     with tmp_dir(["tests/hook_test.cpp"]) as tmp_path:
         test_code = f"""
 import os;
-os.chdir('{tmp_path}');
+os.chdir({repr(tmp_path)});
 import cppimport.import_hook;
 import hook_test;
         """
