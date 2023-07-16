@@ -12,10 +12,13 @@ cppimport IPython magic
 
 import contextlib
 import hashlib
+import importlib
 import logging
 import os
 import random
+import re
 import shutil
+import subprocess
 import sys
 
 from IPython.core import display
@@ -80,22 +83,6 @@ def _set_level(verbosity=None, level=None):
     finally:
         root_log.removeFilter(f)
         root_log.setLevel(old_level)
-
-
-# @contextlib.contextmanager
-# def _cflags_append(cflags):
-#     # TODO: add optional argument cfg to cppimport.imp_from_filepath()
-#     # TODO: remove this contextmanager
-#     old_cflags = os.environ.get('CFLAGS')
-#     os.environ['CFLAGS'] = (cflags if old_cflags is None
-#                             else (old_cflags + ' ' + cflags))
-#     try:
-#         yield
-#     finally:
-#         if old_cflags is None:
-#             del os.environ['CFLAGS']
-#         else:
-#             os.environ['CFLAGS'] = old_cflags
 
 
 @magics_class
@@ -291,17 +278,58 @@ class CppImportMagics(Magics):
                 with open(filepath, "w") as f:
                     f.write(code)
 
-                # TODO: add optional argument cfg to cppimport.imp_from_filepath()
-                # with _cflags_append('-DPyInit_' + orig_fullname +
-                #                     '=PyInit_' + fullname):
-                #     module = cppimport.imp_from_filepath(filepath, fullname)
                 cfgbase = {
                     "extra_compile_args": [
                         "-DPyInit_" + orig_fullname + "=PyInit_" + fullname
                     ]
                 }
-                module = cppimport.imp_from_filepath(
-                    filepath, fullname, cfgbase=cfgbase
+                p = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        f"""
+import sys
+import cppimport
+import cppimport.magic
+
+cppimport.magic._logging_config()
+cppimport.settings = {repr(cppimport.settings)}
+with cppimport.magic._set_level(verbosity=int ({repr(args.verbosity)})):
+    ep = cppimport.build_filepath(
+                             {repr(filepath)}, 
+                             {repr(fullname)}, 
+                             cfgbase={repr(cfgbase)}
+                        )
+sys.stdout.flush()
+sys.stderr.flush()
+print("\\next_path='%s'"%(ep))
+sys.exit(0 if ep else 1)
+""",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                if not p.returncode:
+                    _logger.info(
+                        "Build OK with code: %d\n%s" % (p.returncode, p.stdout)
+                    )
+                    ext_path = re.sub("^ext_path='(.*)'$", "\\1", p.stdout.split()[-1])
+                else:
+                    _logger.error(
+                        "Build fail with code: %d\n%s" % (p.returncode, p.stdout)
+                    )
+                    raise RuntimeError(
+                        "Build fail with code: %d, see above" % (p.returncode)
+                    )
+                module = importlib.util.module_from_spec(
+                    importlib.machinery.ModuleSpec(
+                        name=fullname,
+                        loader=importlib.machinery.ExtensionFileLoader(
+                            fullname, ext_path
+                        ),
+                        origin=ext_path,
+                    )
                 )
                 module.__source__ = code
 

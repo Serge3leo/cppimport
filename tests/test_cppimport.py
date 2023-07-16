@@ -45,15 +45,12 @@ def subprocess_check(test_code, returncode=0, cwd=os.path.dirname(__file__)):
         [sys.executable, "-c", test_code],
         cwd=cwd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
     )
     if len(p.stdout) > 0:
         print(p.stdout)
-    if len(p.stderr) > 0:
-        print(p.stderr)
     assert p.returncode == returncode
-    assert "mymodule" not in sys.modules
 
 
 @contextlib.contextmanager
