@@ -13,6 +13,10 @@ import cppimport.build_module
 import cppimport.templating
 from cppimport.find import find_module_cpppath
 
+TCI_NUM_PROC = int(
+    os.environ.get("TCI_NUM_PROC", 100 if not sys.platform.startswith("win") else 15)
+)
+
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.DEBUG)
 
@@ -270,7 +274,8 @@ import cppimport.import_hook;
 import hook_test;
         """
         processes = [
-            Process(target=subprocess_check, args=(test_code,)) for i in range(100)
+            Process(target=subprocess_check, args=(test_code,))
+            for i in range(TCI_NUM_PROC)
         ]
 
         for p in processes:
