@@ -296,8 +296,8 @@ cppimport.magic._logging_config()
 cppimport.settings = {repr(cppimport.settings)}
 with cppimport.magic._set_level(verbosity=int ({repr(args.verbosity)})):
     ep = cppimport.build_filepath(
-                             {repr(filepath)}, 
-                             {repr(fullname)}, 
+                             {repr(filepath)},
+                             {repr(fullname)},
                              cfgbase={repr(cfgbase)}
                         )
 sys.stdout.flush()
