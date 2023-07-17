@@ -90,7 +90,7 @@ class SkipExecutePreprocessor(ExecutePreprocessor):
         return rcell, rresources
 
 
-def test_magic_doc():
+def test_magic_doc(request):
     """Calculation & comparison selected subset of cells."""
 
     with open("magic_doc.ipynb", "rb") as f:
@@ -116,38 +116,44 @@ def test_magic_doc():
                 del t.metadata["execution"]
 
     ep = SkipExecutePreprocessor(timeout=600)
-    km, _ = start_new_kernel()  # Ignore kernelspec in magic_doc.ipynb
-    emd, _ = ep.preprocess(copy.deepcopy(tmd), km=km)
+    try:
+        km, _ = start_new_kernel()  # Ignore kernelspec in magic_doc.ipynb
+        emd, _ = ep.preprocess(copy.deepcopy(tmd), km=km)
 
-    xfail_cells, xpass_cells = 0, 0
+        xfail_cells, xpass_cells = 0, 0
 
-    assert len(tmd.cells) == len(emd.cells)
-    for t, e in zip(tmd.cells, emd.cells):
-        stags = _get_stags(t.metadata)
-        if stags - DTA_TAGS:
-            warnings.warn(
-                Warning("Test magic_doc.ipynb unknown tags: " + str(stags - DTA_TAGS))
-            )
-        if any(o.output_type == "error" for o in e.get("outputs", [])):
-            if _check_sxf("xfail", stags):
-                xfail_cells += 1
+        assert len(tmd.cells) == len(emd.cells)
+        for t, e in zip(tmd.cells, emd.cells):
+            stags = _get_stags(t.metadata)
+            if stags - DTA_TAGS:
+                warnings.warn(
+                    Warning(
+                        "Test magic_doc.ipynb unknown tags: " + str(stags - DTA_TAGS)
+                    )
+                )
+            if any(o.output_type == "error" for o in e.get("outputs", [])):
+                if _check_sxf("xfail", stags):
+                    xfail_cells += 1
+                    continue
+                assert False, "Found 'error' 'outputs' in for cell: " + str(e)
+
+            if DTE_RANDOMS & stags:
                 continue
-            assert False, "Found 'error' 'outputs' in for cell: " + str(e)
 
-        if DTE_RANDOMS & stags:
-            continue
+            if not _check_sxf("xfail", stags):
+                assert _outputs_no_ec(t) == _outputs_no_ec(e), "for cell: " + str(t)
+            elif _outputs_no_ec(t) == _outputs_no_ec(e):
+                xpass_cells += 1
+            else:
+                xfail_cells += 1
 
-        if not _check_sxf("xfail", stags):
-            assert _outputs_no_ec(t) == _outputs_no_ec(e), "for cell: " + str(t)
-        elif _outputs_no_ec(t) == _outputs_no_ec(e):
-            xpass_cells += 1
-        else:
-            xfail_cells += 1
-
-    if xfail_cells or xpass_cells:
-        msg = "\nXFAIL_CELLS = %d XPASS_CELLS = %d\n" % (xfail_cells, xpass_cells)
-        warnings.warn(Warning(msg))
-        if xfail_cells:
-            pytest.xfail(msg)
-
-    km.shutdown_kernel(now=True, restart=False)
+        if xfail_cells or xpass_cells:
+            msg = "XFAIL_CELLS = %d XPASS_CELLS = %d" % (xfail_cells, xpass_cells)
+            warnings.warn(Warning(msg))
+            if xfail_cells:
+                pytest.xfail(msg)
+            else:
+                mark = pytest.mark.xfail(reason="dxfail")
+                request.node.add_marker(mark)
+    finally:
+        km.shutdown_kernel(now=True, restart=False)

@@ -13,20 +13,26 @@ cppimport IPython magic
 import contextlib
 import hashlib
 import importlib
+import io
 import logging
 import os
 import random
 import re
 import shutil
+import struct
 import subprocess
 import sys
 
+import mako.lookup
+import mako.runtime
 from IPython.core import display
 from IPython.core.magic import Magics, cell_magic, line_magic, magics_class
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 from IPython.paths import get_ipython_cache_dir
 
 import cppimport
+import cppimport.importer
+import cppimport.templating
 
 _logger = logging.getLogger(__name__)
 _ci_log_INFO = logging.INFO + 3
@@ -83,6 +89,32 @@ def _set_level(verbosity=None, level=None):
     finally:
         root_log.removeFilter(f)
         root_log.setLevel(old_level)
+
+
+def _get_dependencies_sources(text):
+    module_data = cppimport.importer.setup_module_data("<string>", "<string>")
+    module_data["cfg"] = cppimport.templating.BuildArgs(
+        sources=[],
+        include_dirs=[],
+        extra_compile_args=[],
+        libraries=[],
+        library_dirs=[],
+        extra_link_args=[],
+        dependencies=[],
+        parallel=False,
+    )
+    module_data["setup_pybind11"] = cppimport.templating.setup_pybind11
+    buf = io.StringIO()
+    ctx = mako.runtime.Context(buf, **module_data)
+    try:
+        lookup = mako.lookup.TemplateLookup()
+        lookup.put_string("<string>", text)
+        tmpl = lookup.get_template("<string>")
+        tmpl.render_context(ctx)
+    except:  # noqa: E722
+        _logger.exception(mako.exceptions.text_error_template().render())
+        raise
+    return module_data["cfg"]["dependencies"], module_data["cfg"]["sources"]
 
 
 @magics_class
@@ -235,20 +267,25 @@ class CppImportMagics(Magics):
                 return
             self._cache_check()
             code = "\n" + (cell if cell.endswith("\n") else cell + "\n")
+            dependencies, sources = _get_dependencies_sources(code)
+            _logger.warning("dependencies=%s, sources=%s", dependencies, sources)
             orig_fullname = os.path.splitext(args.cpp_module)[0]
             key = (
-                args.cpp_module,
-                orig_fullname,
-                code,
                 line,
+                code,
                 self.shell.db.get("cppimport"),
-                self._lib_dir,
                 cppimport.__version__,
                 sys.version_info,
                 sys.executable,
             )
-            # TODO: checksum calculate by cppimport.checksum._calc_cur_checksum()
-            checksum = hashlib.md5(str(key).encode("utf-8")).hexdigest()
+            h = hashlib.md5(str(key).encode())
+            for filepath in dependencies + sources:
+                with open(filepath, "rb") as f:
+                    fb = f.read()
+                    h.update(struct.pack(">q", len(fb)))
+                    h.update(fb)
+                    h.update(b"cppimport.magic")
+            checksum = h.hexdigest()
 
             fullname = "_" + checksum + "_" + orig_fullname
 
@@ -311,13 +348,11 @@ sys.exit(0 if ep else 1)
                     text=True,
                 )
                 if not p.returncode:
-                    _logger.info(
-                        "Build OK with code: %d\n%s" % (p.returncode, p.stdout)
-                    )
+                    _logger.info("Build OK with code: %d\n%s", p.returncode, p.stdout)
                     ext_path = re.sub("^ext_path='(.*)'$", "\\1", p.stdout.split()[-1])
                 else:
                     _logger.error(
-                        "Build fail with code: %d\n%s" % (p.returncode, p.stdout)
+                        "Build fail with code: %d\n%s", p.returncode, p.stdout
                     )
                     raise RuntimeError(
                         "Build fail with code: %d, see above" % (p.returncode)
