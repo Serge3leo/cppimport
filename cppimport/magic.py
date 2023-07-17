@@ -316,12 +316,16 @@ class CppImportMagics(Magics):
                 with open(filepath, "w") as f:
                     f.write(code)
 
+                cfgbase = {
+                    "extra_compile_args": [
+                        "-DPyInit_" + orig_fullname + "=PyInit_" + fullname
+                    ]
+                }
                 p = subprocess.run(
                     [
                         sys.executable,
                         "-c",
                         f"""
-import os
 import sys
 
 import cppimport
@@ -330,13 +334,10 @@ import cppimport.magic
 cppimport.magic._logging_config()
 cppimport.settings = {repr(cppimport.settings)}
 with cppimport.magic._set_level(verbosity=int ({repr(args.verbosity)})):
-    os.environ['CFLAGS'] = (os.environ.get('CFLAGS', "") +
-                            " -DPyInit_" + {repr(orig_fullname)} +
-                            "=PyInit_" + {repr(fullname)}
-                            )
     ep = cppimport.build_filepath(
                              {repr(filepath)},
                              {repr(fullname)},
+                             cfgbase={repr(cfgbase)},
                         )
 sys.stdout.flush()
 sys.stderr.flush()
