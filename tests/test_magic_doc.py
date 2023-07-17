@@ -91,8 +91,9 @@ class SkipExecutePreprocessor(ExecutePreprocessor):
 
 
 @pytest.mark.xfail(
-    sys.platform.startswith("win") and sys.version_info <= (3, 7),
+    sys.platform.startswith("win") and sys.version_info < (3, 8),
     reason="Python 3.7 for Windows - not supported",
+    run=False
 )
 def test_magic_doc(request):
     """Calculation & comparison selected subset of cells."""
@@ -113,11 +114,6 @@ def test_magic_doc(request):
         tmd.cells.append(
             nbformat.v4.new_code_cell("_tdi_cov.stop()\n" "_tdi_cov.save()\n")
         )
-
-    for t in tmd.cells:
-        if t.cell_type == "code":
-            if "execution" in t.metadata:  # TODO: remove
-                del t.metadata["execution"]
 
     ep = SkipExecutePreprocessor(timeout=600)
     try:
