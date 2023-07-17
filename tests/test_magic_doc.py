@@ -153,7 +153,6 @@ def test_magic_doc(request):
             if xfail_cells:
                 pytest.xfail(msg)
             else:
-                mark = pytest.mark.xfail(reason="dxfail")
-                request.node.add_marker(mark)
+                request.node.add_marker(pytest.mark.xfail(reason=msg))
     finally:
         km.shutdown_kernel(now=True, restart=False)
