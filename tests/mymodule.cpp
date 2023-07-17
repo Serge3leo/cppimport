@@ -17,7 +17,7 @@ int add(int i, int j) {
 PYBIND11_MODULE(mymodule, m) {
     m.def("add", &add);
 #ifdef THING_DEFINED
-    #pragma message "stuff"
+    #pragma message ("stuff")
     py::class_<Thing>(m, "Thing")
         .def(py::init<>())
         .def("cheer", &Thing::cheer);
