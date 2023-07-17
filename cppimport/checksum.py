@@ -2,7 +2,9 @@ import hashlib
 import json
 import logging
 import struct
+import sys
 
+import cppimport
 from cppimport.filepaths import make_absolute
 
 _TAG = b"cppimport"
@@ -87,8 +89,11 @@ def _save_checksum_trailer(module_data, dep_filepaths, cur_checksum):
 
 
 def _calc_cur_checksum(file_lst, module_data):
-    text = b""
+    h = hashlib.md5(repr((cppimport.__version__, sys.version, sys.executable)).encode())
     for filepath in file_lst:
         with open(filepath, "rb") as f:
-            text += f.read()
-    return hashlib.md5(text).hexdigest()
+            fb = f.read()
+            h.update(struct.pack(">q", len(fb)))
+            h.update(fb)
+            h.update(_TAG)
+    return h.hexdigest()

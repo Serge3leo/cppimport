@@ -12,18 +12,27 @@ cppimport IPython magic
 
 import contextlib
 import hashlib
+import importlib
+import io
 import logging
 import os
 import random
+import re
 import shutil
+import struct
+import subprocess
 import sys
 
+import mako.lookup
+import mako.runtime
 from IPython.core import display
 from IPython.core.magic import Magics, cell_magic, line_magic, magics_class
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 from IPython.paths import get_ipython_cache_dir
 
 import cppimport
+import cppimport.importer
+import cppimport.templating
 
 _logger = logging.getLogger(__name__)
 _ci_log_INFO = logging.INFO + 3
@@ -82,20 +91,30 @@ def _set_level(verbosity=None, level=None):
         root_log.setLevel(old_level)
 
 
-# @contextlib.contextmanager
-# def _cflags_append(cflags):
-#     # TODO: add optional argument cfg to cppimport.imp_from_filepath()
-#     # TODO: remove this contextmanager
-#     old_cflags = os.environ.get('CFLAGS')
-#     os.environ['CFLAGS'] = (cflags if old_cflags is None
-#                             else (old_cflags + ' ' + cflags))
-#     try:
-#         yield
-#     finally:
-#         if old_cflags is None:
-#             del os.environ['CFLAGS']
-#         else:
-#             os.environ['CFLAGS'] = old_cflags
+def _get_dependencies_sources(text):
+    module_data = cppimport.importer.setup_module_data("<string>", "<string>")
+    module_data["cfg"] = cppimport.templating.BuildArgs(
+        sources=[],
+        include_dirs=[],
+        extra_compile_args=[],
+        libraries=[],
+        library_dirs=[],
+        extra_link_args=[],
+        dependencies=[],
+        parallel=False,
+    )
+    module_data["setup_pybind11"] = cppimport.templating.setup_pybind11
+    buf = io.StringIO()
+    ctx = mako.runtime.Context(buf, **module_data)
+    try:
+        lookup = mako.lookup.TemplateLookup()
+        lookup.put_string("<string>", text)
+        tmpl = lookup.get_template("<string>")
+        tmpl.render_context(ctx)
+    except:  # noqa: E722
+        _logger.exception(mako.exceptions.text_error_template().render())
+        raise
+    return module_data["cfg"]["dependencies"], module_data["cfg"]["sources"]
 
 
 @magics_class
@@ -247,22 +266,28 @@ class CppImportMagics(Magics):
                 print(self.cppimport.__doc__)
                 return
             self._cache_check()
+
             code = "\n" + (cell if cell.endswith("\n") else cell + "\n")
-            orig_fullname = os.path.splitext(args.cpp_module)[0]
+
             key = (
-                args.cpp_module,
-                orig_fullname,
-                code,
                 line,
+                code,
                 self.shell.db.get("cppimport"),
-                self._lib_dir,
                 cppimport.__version__,
                 sys.version_info,
                 sys.executable,
             )
-            # TODO: checksum calculate by cppimport.checksum._calc_cur_checksum()
-            checksum = hashlib.md5(str(key).encode("utf-8")).hexdigest()
+            dependencies, sources = _get_dependencies_sources(code)
+            h = hashlib.md5(str(key).encode())
+            for filepath in dependencies + sources:
+                with open(filepath, "rb") as f:
+                    fb = f.read()
+                    h.update(struct.pack(">q", len(fb)))
+                    h.update(fb)
+                    h.update(b"cppimport.magic")
+            checksum = h.hexdigest()
 
+            orig_fullname = os.path.splitext(args.cpp_module)[0]
             fullname = "_" + checksum + "_" + orig_fullname
 
             if fullname in sys.modules and cppimport.settings["force_rebuild"]:
@@ -291,17 +316,56 @@ class CppImportMagics(Magics):
                 with open(filepath, "w") as f:
                     f.write(code)
 
-                # TODO: add optional argument cfg to cppimport.imp_from_filepath()
-                # with _cflags_append('-DPyInit_' + orig_fullname +
-                #                     '=PyInit_' + fullname):
-                #     module = cppimport.imp_from_filepath(filepath, fullname)
                 cfgbase = {
                     "extra_compile_args": [
                         "-DPyInit_" + orig_fullname + "=PyInit_" + fullname
                     ]
                 }
-                module = cppimport.imp_from_filepath(
-                    filepath, fullname, cfgbase=cfgbase
+                p = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        f"""
+import sys
+import cppimport
+import cppimport.magic
+
+cppimport.magic._logging_config()
+cppimport.settings = {repr(cppimport.settings)}
+with cppimport.magic._set_level(verbosity=int ({repr(args.verbosity)})):
+    ep = cppimport.build_filepath(
+                             {repr(filepath)},
+                             {repr(fullname)},
+                             cfgbase={repr(cfgbase)}
+                        )
+sys.stdout.flush()
+sys.stderr.flush()
+print("\\next_path='%s'"%(ep))
+sys.exit(0 if ep else 1)
+""",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                if not p.returncode:
+                    _logger.info("Build OK with code: %d\n%s", p.returncode, p.stdout)
+                    ext_path = re.sub("^ext_path='(.*)'$", "\\1", p.stdout.split()[-1])
+                else:
+                    _logger.error(
+                        "Build fail with code: %d\n%s", p.returncode, p.stdout
+                    )
+                    raise RuntimeError(
+                        "Build fail with code: %d, see above" % (p.returncode)
+                    )
+                module = importlib.util.module_from_spec(
+                    importlib.machinery.ModuleSpec(
+                        name=fullname,
+                        loader=importlib.machinery.ExtensionFileLoader(
+                            fullname, ext_path
+                        ),
+                        origin=ext_path,
+                    )
                 )
                 module.__source__ = code
 

@@ -1,6 +1,8 @@
 *.swp
 *.pyc
 *.so
+*.pyd
+*.lock
 *.cppimporthash
 .rendered.*
 __pycache__

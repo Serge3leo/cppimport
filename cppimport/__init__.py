@@ -89,7 +89,7 @@ def imp_from_filepath(filepath, fullname=None, *, cfgbase={}):
     return module_data["module"]
 
 
-def build(fullname):
+def build(fullname, *, cfgbase={}):
     """
     `build` builds a extension module like `imp` but does not import the
     extension.
@@ -106,10 +106,10 @@ def build(fullname):
 
     # Search through sys.path to find a file that matches the module
     filepath = find_module_cpppath(fullname)
-    return build_filepath(filepath, fullname=fullname)
+    return build_filepath(filepath, fullname=fullname, cfgbase=cfgbase)
 
 
-def build_filepath(filepath, fullname=None):
+def build_filepath(filepath, fullname=None, *, cfgbase={}):
     """
     `build_filepath` builds a extension module like `build` but allows
     to directly specify a file path.
@@ -133,7 +133,7 @@ def build_filepath(filepath, fullname=None):
     filepath = os.path.abspath(filepath)
     if fullname is None:
         fullname = os.path.splitext(os.path.basename(filepath))[0]
-    module_data = setup_module_data(fullname, filepath)
+    module_data = setup_module_data(fullname, filepath, cfgbase=cfgbase)
     if is_build_needed(module_data):
         build_safely(filepath, module_data)
     load_module(module_data)
