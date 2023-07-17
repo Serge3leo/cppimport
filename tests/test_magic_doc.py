@@ -93,7 +93,7 @@ class SkipExecutePreprocessor(ExecutePreprocessor):
 @pytest.mark.xfail(
     sys.platform.startswith("win") and sys.version_info < (3, 8),
     reason="Python 3.7 for Windows - not supported",
-    run=False
+    run=False,
 )
 def test_magic_doc(request):
     """Calculation & comparison selected subset of cells."""
