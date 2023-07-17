@@ -27,7 +27,7 @@ settings = dict(
 _logger = logging.getLogger("cppimport")
 
 
-def imp(fullname, opt_in=False):
+def imp(fullname, opt_in=False, *, cfgbase={}):
     """
     `imp` is the explicit alternative to using cppimport.import_hook.
 
@@ -47,10 +47,10 @@ def imp(fullname, opt_in=False):
 
     # Search through sys.path to find a file that matches the module
     filepath = find_module_cpppath(fullname, opt_in)
-    return imp_from_filepath(filepath, fullname)
+    return imp_from_filepath(filepath, fullname, cfgbase=cfgbase)
 
 
-def imp_from_filepath(filepath, fullname=None):
+def imp_from_filepath(filepath, fullname=None, *, cfgbase={}):
     """
     `imp_from_filepath` serves the same purpose as `imp` except allows
     specifying the exact filepath of the C++ file.
@@ -76,7 +76,7 @@ def imp_from_filepath(filepath, fullname=None):
     filepath = os.path.abspath(filepath)
     if fullname is None:
         fullname = os.path.splitext(os.path.basename(filepath))[0]
-    module_data = setup_module_data(fullname, filepath)
+    module_data = setup_module_data(fullname, filepath, cfgbase=cfgbase)
     # The call to try_load is necessary here because there are times when the
     # only evidence a rebuild is needed comes from attempting to load an
     # existing extension module. For example, if the extension was built on a
@@ -89,7 +89,7 @@ def imp_from_filepath(filepath, fullname=None):
     return module_data["module"]
 
 
-def build(fullname):
+def build(fullname, *, cfgbase={}):
     """
     `build` builds a extension module like `imp` but does not import the
     extension.
@@ -106,10 +106,10 @@ def build(fullname):
 
     # Search through sys.path to find a file that matches the module
     filepath = find_module_cpppath(fullname)
-    return build_filepath(filepath, fullname=fullname)
+    return build_filepath(filepath, fullname=fullname, cfgbase=cfgbase)
 
 
-def build_filepath(filepath, fullname=None):
+def build_filepath(filepath, fullname=None, *, cfgbase={}):
     """
     `build_filepath` builds a extension module like `build` but allows
     to directly specify a file path.
@@ -133,7 +133,7 @@ def build_filepath(filepath, fullname=None):
     filepath = os.path.abspath(filepath)
     if fullname is None:
         fullname = os.path.splitext(os.path.basename(filepath))[0]
-    module_data = setup_module_data(fullname, filepath)
+    module_data = setup_module_data(fullname, filepath, cfgbase=cfgbase)
     if is_build_needed(module_data):
         build_safely(filepath, module_data)
     load_module(module_data)

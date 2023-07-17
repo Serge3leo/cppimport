@@ -94,6 +94,10 @@ def run_templating(module_data):
 
     module_data["rendered_src_filepath"] = rendered_src_filepath
 
+    for k, v in module_data["cfgbase"].items():
+        module_data["cfg"][k] = v + module_data["cfg"][k]
+        # module_data["cfg"]["parallel"] - actually or-ed
+
     _check_module_data_cfg_settings(module_data)
 
 
