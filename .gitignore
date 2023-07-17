@@ -1,6 +1,8 @@
 *.swp
 *.pyc
 *.so
+*.pyd
+*.lock
 *.cppimporthash
 .rendered.*
 __pycache__
@@ -15,3 +17,5 @@ htmlcov
 **/.DS_Store
 .eggs
 cppimport/_version.py
+.ipynb_checkpoints
+.temp_test_*
