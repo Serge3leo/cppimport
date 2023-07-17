@@ -266,10 +266,9 @@ class CppImportMagics(Magics):
                 print(self.cppimport.__doc__)
                 return
             self._cache_check()
+
             code = "\n" + (cell if cell.endswith("\n") else cell + "\n")
-            dependencies, sources = _get_dependencies_sources(code)
-            _logger.warning("dependencies=%s, sources=%s", dependencies, sources)
-            orig_fullname = os.path.splitext(args.cpp_module)[0]
+
             key = (
                 line,
                 code,
@@ -278,6 +277,7 @@ class CppImportMagics(Magics):
                 sys.version_info,
                 sys.executable,
             )
+            dependencies, sources = _get_dependencies_sources(code)
             h = hashlib.md5(str(key).encode())
             for filepath in dependencies + sources:
                 with open(filepath, "rb") as f:
@@ -287,6 +287,7 @@ class CppImportMagics(Magics):
                     h.update(b"cppimport.magic")
             checksum = h.hexdigest()
 
+            orig_fullname = os.path.splitext(args.cpp_module)[0]
             fullname = "_" + checksum + "_" + orig_fullname
 
             if fullname in sys.modules and cppimport.settings["force_rebuild"]:
