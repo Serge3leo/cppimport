@@ -1,8 +1,13 @@
 import hashlib
 import json
 import logging
+import os
 import struct
 import sys
+
+import setuptools
+
+import mako
 
 import cppimport
 from cppimport.filepaths import make_absolute
@@ -89,7 +94,24 @@ def _save_checksum_trailer(module_data, dep_filepaths, cur_checksum):
 
 
 def _calc_cur_checksum(file_lst, module_data):
-    h = hashlib.md5(repr((cppimport.__version__, sys.version, sys.executable)).encode())
+    key = (
+        # Versions of all modules on which builds order, flags and libraries
+        # of builded modules.
+        cppimport.__version__,
+        mako.__version__,
+        setuptools.__version__,
+        sys.version,
+        # Enviroment (virtual environment)
+        sys.base_exec_prefix,
+        sys.exec_prefix,
+        sys.executable,
+        # Some (not all) compilation flags
+        module_data.get("cfgbase"),
+        os.environ.get("CFLAGS"),
+        os.environ.get("CPPFLAGS"),
+        os.environ.get("CXXFLAGS"),
+    )
+    h = hashlib.md5(repr(key).encode())
     for filepath in file_lst:
         with open(filepath, "rb") as f:
             fb = f.read()

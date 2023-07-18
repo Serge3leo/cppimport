@@ -23,6 +23,8 @@ import struct
 import subprocess
 import sys
 
+import setuptools
+
 import mako.lookup
 import mako.runtime
 from IPython.core import display
@@ -91,7 +93,7 @@ def _set_level(verbosity=None, level=None):
         root_log.setLevel(old_level)
 
 
-def _get_dependencies_sources(text):
+def _get_module_data(text):
     module_data = cppimport.importer.setup_module_data("<string>", "<string>")
     module_data["cfg"] = cppimport.templating.BuildArgs(
         sources=[],
@@ -114,7 +116,35 @@ def _get_dependencies_sources(text):
     except:  # noqa: E722
         _logger.exception(mako.exceptions.text_error_template().render())
         raise
-    return module_data["cfg"]["dependencies"], module_data["cfg"]["sources"]
+    return module_data
+
+
+def _calc_checksum(cell_key, module_data):
+    # Versions of all modules on which builds order, flags and libraries
+    # of builded modules.
+    cfg = module_data["cfg"]
+    key = (
+        cell_key,
+        cppimport.__version__,
+        mako.__version__,
+        setuptools.__version__,
+        sys.version,
+        sys.base_exec_prefix,
+        sys.exec_prefix,
+        sys.executable,
+        cfg,
+        os.environ.get("CFLAGS"),
+        os.environ.get("CPPFLAGS"),
+        os.environ.get("CXXFLAGS"),
+    )
+    h = hashlib.md5(repr(key).encode())
+    for filepath in cfg.get("dependencies", []) + cfg.get("sources", []):
+        with open(filepath, "rb") as f:
+            fb = f.read()
+            h.update(struct.pack(">q", len(fb)))
+            h.update(fb)
+            h.update(b"cppimport.magic")
+    return h.hexdigest()
 
 
 @magics_class
@@ -269,23 +299,8 @@ class CppImportMagics(Magics):
 
             code = "\n" + (cell if cell.endswith("\n") else cell + "\n")
 
-            key = (
-                line,
-                code,
-                self.shell.db.get("cppimport"),
-                cppimport.__version__,
-                sys.version_info,
-                sys.executable,
-            )
-            dependencies, sources = _get_dependencies_sources(code)
-            h = hashlib.md5(str(key).encode())
-            for filepath in dependencies + sources:
-                with open(filepath, "rb") as f:
-                    fb = f.read()
-                    h.update(struct.pack(">q", len(fb)))
-                    h.update(fb)
-                    h.update(b"cppimport.magic")
-            checksum = h.hexdigest()
+            module_data = _get_module_data(code)
+            checksum = _calc_checksum((line, code, args), module_data)
 
             orig_fullname = os.path.splitext(args.cpp_module)[0]
             fullname = "_" + checksum + "_" + orig_fullname
