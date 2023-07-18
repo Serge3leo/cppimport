@@ -327,6 +327,7 @@ class CppImportMagics(Magics):
                         "-c",
                         f"""
 import sys
+
 import cppimport
 import cppimport.magic
 
@@ -336,7 +337,7 @@ with cppimport.magic._set_level(verbosity=int ({repr(args.verbosity)})):
     ep = cppimport.build_filepath(
                              {repr(filepath)},
                              {repr(fullname)},
-                             cfgbase={repr(cfgbase)}
+                             cfgbase={repr(cfgbase)},
                         )
 sys.stdout.flush()
 sys.stderr.flush()
